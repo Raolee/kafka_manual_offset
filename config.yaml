@@ -1,0 +1,6 @@
+kafka:
+  brokers:
+    - "localhost:9092"
+  topics:
+    - topic: "test-topic"
+      partition-count: 2
