@@ -65,38 +65,37 @@ func (k *KafkaAdminClient) ChangeOffset(topic string, group string, offset int64
 	}
 
 	for _, partition := range metadata.Topics[0].Partitions {
-		// Step 2: Create OffsetCommitRequest for each partition
-		offsetCommitRequest := &kafka.OffsetCommitRequest{
-			Addr:    k.client.Addr,
-			GroupID: group,
-			Topics: map[string][]kafka.OffsetCommit{
-				topic: {
-					{
-						Partition: partition.ID,
-						Offset:    offset,
-					},
-				},
-			},
+		// Create a new consumer to commit offsets
+		consumerGroup, err := kafka.NewConsumerGroup(kafka.ConsumerGroupConfig{
+			Brokers: []string{k.client.Addr.String()},
+			Topics:  []string{topic},
+			ID:      group,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create consumer group: %v", err)
 		}
+		defer consumerGroup.Close()
 
-		// Step 3: Commit the offset
-		response, err := k.client.OffsetCommit(ctx, offsetCommitRequest)
+		// Set the offset
+		next, err := consumerGroup.Next(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed next consumger group : %v", err)
+		}
+		err = next.CommitOffsets(map[string]map[int]int64{
+			topic: {
+				int(partition.ID): offset,
+			},
+		})
 		if err != nil {
 			return fmt.Errorf("failed to commit offset: %v", err)
 		}
 
-		for _, offsets := range response.Topics[topic] {
-			if offsets.Error != nil {
-				return fmt.Errorf("failed to commit offset for partition %d: %v", partition, offsets.Error)
-			}
-		}
-
-		fmt.Printf("Successfully set offset for partition %d to %d\n", partition, offset)
+		fmt.Printf("Successfully set offset for partition %d to %d\n", partition.ID, offset)
 	}
 
 	return nil
 }
 
 func (k *KafkaAdminClient) Close() {
-	// kafka-go 클라이언트에는 별도의 Close 메서드가 없습니다.
+	// kafka-go 는 close 가 별도로 없넹
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	"log"
 	"sync"
+	"time"
 )
 
 type Consumer interface {
@@ -36,11 +37,12 @@ type KafkaConsumer struct {
 
 func NewKafkaConsumer(brokers []string, topic string, group string) Consumer {
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  brokers,
-		GroupID:  group,
-		Topic:    topic,
-		MinBytes: 10e2,
-		MaxBytes: 10e6,
+		Brokers:        brokers,
+		GroupID:        group,
+		Topic:          topic,
+		MinBytes:       1,
+		MaxBytes:       10e6,
+		CommitInterval: 100 * time.Millisecond,
 	})
 
 	return &KafkaConsumer{
@@ -70,7 +72,17 @@ func (c *KafkaConsumer) Info() struct {
 func (c *KafkaConsumer) Start(ctx context.Context, wg *sync.WaitGroup) {
 	fmt.Printf("Starting consumer on topic %s group %s\n", c.topic, c.group)
 	defer wg.Done()
-	n := int64(100)
+
+	offsetTerm := int64(100000)
+	// [Note] : 1만건 소비 마다 시간 측정하기, 변수세팅
+	term := int64(10000)
+	start := int64(0)
+	startTimestamp := time.Now().UnixNano()
+	var durationSum int64 = 0
+	var durationCnt int64 = 0
+	defer func() {
+		fmt.Printf("group 평균 1만건 소비 속도 : %d\n", durationSum/durationCnt)
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -91,7 +103,17 @@ func (c *KafkaConsumer) Start(ctx context.Context, wg *sync.WaitGroup) {
 			}
 			c.currentOffsetMap[m.Partition] = m.Offset
 			c.msgChan <- m
-			if m.Offset%n == 0 { // 100개마다 로그 출력
+
+			start++
+			if start == term {
+				duration := (time.Now().UnixNano() - startTimestamp) / 1000000
+				//fmt.Printf("group 10000 consumed, %d ms\n", duration)
+				durationSum += duration
+				durationCnt++
+				startTimestamp = time.Now().UnixNano()
+				start = 0
+			}
+			if m.Offset%offsetTerm == 0 { // 10000개마다 로그 출력
 				fmt.Printf("consumer Partition %d message at offset %d: %s = %s\n", m.Partition, m.Offset, string(m.Key), string(m.Value))
 			}
 		}

@@ -32,6 +32,7 @@ func (m *Manager) StartAllConsumers(ctx context.Context, wg *sync.WaitGroup) {
 	for _, consumers := range m.consumerMap {
 		for _, consumer := range consumers {
 			go func(c Consumer) {
+				wg.Add(1)
 				c.Start(ctx, wg)
 			}(consumer)
 		}

@@ -47,8 +47,6 @@ func (m *Manager) StartAllConsumers(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (m *Manager) GetConsumers(topic string, group string) (Consumer, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 	if _, ok := m.topicGroupConsumerMap[topic]; !ok {
 		return nil, false
 	}
@@ -69,10 +67,10 @@ func (m *Manager) SetOffset(topic string, group string, offset int64) error {
 	consumer.Pause()
 
 	// Change the offset
-	fmt.Printf("change offset group=%s, offset=%d", group, offset)
 	if err := m.admin.ChangeOffset(topic, group, offset); err != nil {
 		return err
 	}
+	fmt.Printf("change offset group=%s, offset=%d \n", group, offset)
 
 	// Resume the consumer
 	consumer.Resume()
